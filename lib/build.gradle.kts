@@ -1,6 +1,7 @@
 plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     alias(libs.plugins.kotlin.jvm)
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.2"
 
     // Apply the java-library plugin for API and implementation separation.
     `java-library`
@@ -40,20 +41,117 @@ tasks.named<Test>("test") {
 }
 
 tasks.register<Sample>("kotlin") {}
+
 abstract class Sample : DefaultTask() {
     @TaskAction
     fun kotlin() {
-        println("KotlinVersion >> " + KotlinVersion.CURRENT)  // =>  KotlinVersion >> 1.8.10
+        println("KotlinVersion >> " + KotlinVersion.CURRENT)
     }
 }
 
 tasks.register<Draw>("draw") {}
+
 abstract class Draw : DefaultTask() {
     @TaskAction
     fun draw() {
-        val deck = Deck()
-        val card = deck.draw()
-        println(card.toString())
+        println(Deck().draw().toString())
+    }
+}
+
+tasks.register<Judge>("judge") {
+    args.set((project.findProperty("args") as String?)?.split(" ") ?: listOf())
+}
+
+abstract class Judge : DefaultTask() {
+    @get:Input
+    abstract val args: ListProperty<String>
+
+    @TaskAction
+    fun execute() {
+        val input = args.get()
+        val rank =
+            validate(input).run {
+                toHand(this)
+                    .judge()
+            }
+        println(rank.name)
+    }
+
+    private fun validate(input: List<String>): List<String> {
+        TODO("not implemented")
+        return input
+    }
+
+    private fun toHand(input: List<String>): Hand {
+        return Hand(input.map { Card.of(it) }.toTypedArray())
+    }
+}
+
+class Hand(private val cards: Array<Card>) {
+    fun judge(): Role {
+        return when {
+            isStraightFlush() -> Role.STRAIGHT_FLUSH
+            isFourOfAKind() -> Role.FOUR_OF_A_KIND
+            isFullHouse() -> Role.FULL_HOUSE
+            isFlush() -> Role.FLUSH
+            isStraight() -> Role.STRAIGHT
+            isThreeOfAKind() -> Role.THREE_OF_A_KIND
+            isTwoPair() -> Role.TWO_PAIR
+            isOnePair() -> Role.ONE_PAIR
+            else -> Role.HIGH_CARDS
+        }
+    }
+
+    private fun isStraightFlush(): Boolean = isFlush() && isStraight()
+
+    private fun isFlush() = cards.map { it.suit }.toSet().size == 1
+
+    private fun isStraight(): Boolean {
+        return isRoyalStraight() ||
+            cards.map { it.rank.value }.toSet().let {
+                it.size == 5 && (it.max() - it.min() == 4)
+            }
+    }
+
+    private fun isRoyalStraight(): Boolean {
+        return cards.map { it.rank }.toSet() ==
+            setOf(
+                Rank.ACE,
+                Rank.KING,
+                Rank.QUEEN,
+                Rank.JACK,
+                Rank.TEN,
+            )
+    }
+
+    private fun isFourOfAKind(): Boolean {
+        return cards.groupingBy { it.rank }.eachCount().let {
+            it.size == 2 && it.containsValue(4)
+        }
+    }
+
+    private fun isFullHouse(): Boolean {
+        return cards.groupingBy { it.rank }.eachCount().let {
+            it.size == 2 && it.containsValue(3) && it.containsValue(2)
+        }
+    }
+
+    private fun isThreeOfAKind(): Boolean {
+        return cards.groupingBy { it.rank }.eachCount().let {
+            it.size == 3 && it.containsValue(3)
+        }
+    }
+
+    private fun isTwoPair(): Boolean {
+        return cards.groupingBy { it.rank }.eachCount().let {
+            it.size == 3 && it.containsValue(2)
+        }
+    }
+
+    private fun isOnePair(): Boolean {
+        return cards.groupingBy { it.rank }.eachCount().let {
+            it.size == 4 && it.containsValue(2)
+        }
     }
 }
 
@@ -63,6 +161,14 @@ enum class Suit(val symbol: String) {
     DIAMOND("♦"),
     CLUB("♣"),
     ;
+
+    companion object {
+        fun of(symbol: String): Suit {
+            return Suit.values().find {
+                it.symbol == symbol
+            } ?: throw Exception("can't convert to Suit. symbol: $symbol")
+        }
+    }
 }
 
 enum class Rank(val symbol: String, val value: Int) {
@@ -80,11 +186,39 @@ enum class Rank(val symbol: String, val value: Int) {
     KING("13", 13),
     ACE("A", 1),
     ;
+
+    companion object {
+        fun of(symbol: String): Rank {
+            return Rank.values().find {
+                it.symbol == symbol
+            } ?: throw Exception("can't convert to Rank. symbol: $symbol")
+        }
+    }
+}
+
+enum class Role(rank: Int) {
+    STRAIGHT_FLUSH(1),
+    FOUR_OF_A_KIND(2),
+    FULL_HOUSE(3),
+    FLUSH(4),
+    STRAIGHT(5),
+    THREE_OF_A_KIND(6),
+    TWO_PAIR(7),
+    ONE_PAIR(9),
+    HIGH_CARDS(10),
 }
 
 class Card(val suit: Suit, val rank: Rank) {
     override fun toString(): String {
         return "${suit.symbol}${rank.symbol}"
+    }
+
+    companion object {
+        fun of(card: String): Card {
+            val suit = Suit.of(card.take(1))
+            val rank = Rank.of(card.drop(1))
+            return Card(suit, rank)
+        }
     }
 }
 
