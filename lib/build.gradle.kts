@@ -70,15 +70,22 @@ abstract class Judge : DefaultTask() {
     fun execute() {
         val input = args.get()
         val rank =
-            validate(input).run {
-                toHand(this)
-                    .judge()
+            input.run {
+                validate(this).run {
+                    toHand(this).judge()
+                }
             }
         println(rank.name)
     }
 
     private fun validate(input: List<String>): List<String> {
-        TODO("not implemented")
+        if (input.size != 5) {
+            throw InvalidParameterException("input argument must be 5. input: $input")
+        }
+        if (input.size != input.toSet().size) {
+            throw InvalidParameterException("duplicated card. input: $input")
+        }
+
         return input
     }
 
@@ -166,7 +173,7 @@ enum class Suit(val symbol: String) {
         fun of(symbol: String): Suit {
             return Suit.values().find {
                 it.symbol == symbol
-            } ?: throw Exception("can't convert to Suit. symbol: $symbol")
+            } ?: throw InvalidParameterException("can't convert to Suit. symbol: $symbol")
         }
     }
 }
@@ -191,7 +198,7 @@ enum class Rank(val symbol: String, val value: Int) {
         fun of(symbol: String): Rank {
             return Rank.values().find {
                 it.symbol == symbol
-            } ?: throw Exception("can't convert to Rank. symbol: $symbol")
+            } ?: throw InvalidParameterException("can't convert to Rank. symbol: $symbol")
         }
     }
 }
@@ -238,3 +245,5 @@ class Deck {
         return cards.removeAt(0)
     }
 }
+
+class InvalidParameterException(message: String): Exception (message)
